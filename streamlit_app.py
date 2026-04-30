@@ -614,6 +614,10 @@ with tab_positions:
                     stop_auto_bot(manager, suppress_save=True)
 
                 delete_position(selected_symbol)
+                
+                # Remove the trader from memory to prevent it from writing files after deletion
+                if selected_symbol in manager.traders:
+                    del manager.traders[selected_symbol]
 
                 if bot_was_running and is_market_open():
                     start_auto_bot(manager, force_reload=True)
