@@ -20,6 +20,7 @@ load_dotenv()
 from .trailing_stop_strategy import TrailingStopStrategy
 from .paper_trader import PaperTrader
 from .logger import setup_logger
+from .position_store import delete_position, load_position, save_position
 from .trade_history import record_trade
 from .notification import send_email_notification
 
@@ -27,7 +28,7 @@ from .notification import send_email_notification
 class StockPaperTrader:
     """Generic paper trader for any stock symbol"""
     
-    def __init__(self, symbol: str = "NABIL", check_interval: int = 900, log_file: str = None):
+    def __init__(self, symbol: str = "NABIL", check_interval: int = 900, log_file: str = None, positions_db_path: str = None):
         """
         Initialize stock paper trader
         
@@ -35,11 +36,13 @@ class StockPaperTrader:
             symbol: Stock symbol (e.g., "NABIL", "GUFL") - default NABIL
             check_interval: Check price every N seconds (default 900 = 15 minutes)
             log_file: Log file path (default logs/{symbol}.log)
+            positions_db_path: SQLite database used to persist position state
         """
         self.symbol = symbol.upper()
         self.check_interval = check_interval
+        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DB_PATH", "data/nepse_positions.db")
         self.log_file = log_file or f"logs/{self.symbol.lower()}.log"
-        self.position_state_file = f"logs/{self.symbol.lower()}_position.json"
+        self.position_state_file = self.positions_db_path
         
         # Create logger
         self.logger = setup_logger(f"{__name__}.{self.symbol}", log_file=self.log_file)
@@ -169,22 +172,14 @@ class StockPaperTrader:
             self.last_stop_loss = self.strategy.current_stop_loss
 
     def load_position_state(self) -> Optional[Dict]:
-        """Load a previously saved open position from disk."""
-        if not os.path.exists(self.position_state_file):
+        """Load a previously saved open position from the SQLite store."""
+        state = load_position(self.symbol, positions_dir=self.positions_db_path)
+        if not state:
             return None
-
-        try:
-            with open(self.position_state_file, "r", encoding="utf-8") as file:
-                state = json.load(file)
-        except (OSError, json.JSONDecodeError):
-            return None
-
         if state.get("symbol") != self.symbol:
             return None
-
         if int(state.get("shares", 0)) <= 0:
             return None
-
         return state
 
     def save_position_state(self):
@@ -192,11 +187,7 @@ class StockPaperTrader:
         position = self.paper_trader.get_position(self.symbol)
 
         if not position or position.get("shares", 0) <= 0:
-            if os.path.exists(self.position_state_file):
-                try:
-                    os.remove(self.position_state_file)
-                except OSError:
-                    pass
+            delete_position(self.symbol, positions_dir=self.positions_db_path)
             # Reset stoploss alert tracking when position is removed
             self.last_stop_loss = None
             self.stoploss_alerted = False
@@ -214,11 +205,8 @@ class StockPaperTrader:
             "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        os.makedirs(os.path.dirname(self.position_state_file), exist_ok=True)
-        with open(self.position_state_file, "w", encoding="utf-8") as file:
-            json.dump(state, file, indent=2)
-
-        self.logger.info(f"Saved open position to {self.position_state_file}")
+        save_position(state, positions_dir=self.positions_db_path)
+        self.logger.info(f"Saved open position to SQLite DB {self.positions_db_path}")
 
     def _has_open_position(self) -> bool:
         """Return True if the trader still holds shares for this symbol."""

@@ -12,6 +12,8 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional
 
+import os
+
 from .logger import setup_logger
 from .position_store import list_positions
 from .stock_trader import StockPaperTrader
@@ -22,8 +24,8 @@ logger = setup_logger(__name__)
 class PortfolioBotManager:
     """Monitor one or more saved positions with auto bot logic."""
 
-    def __init__(self, logs_dir: str = "logs", check_interval_seconds: int = 900):
-        self.logs_dir = logs_dir
+    def __init__(self, positions_db_path: str = None, check_interval_seconds: int = 900):
+        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DB_PATH", "data/nepse_positions.db")
         self.check_interval_seconds = int(check_interval_seconds)
         self.logger = logger
         self.traders: Dict[str, StockPaperTrader] = {}
@@ -40,7 +42,7 @@ class PortfolioBotManager:
             return self.traders
 
         self.traders = {}
-        positions = list_positions(self.logs_dir)
+        positions = list_positions(self.positions_db_path)
 
         for position in positions:
             symbol = str(position.get("symbol", "")).upper()
@@ -51,6 +53,7 @@ class PortfolioBotManager:
                 trader = StockPaperTrader(
                     symbol=symbol,
                     check_interval=self.check_interval_seconds,
+                    positions_db_path=self.positions_db_path,
                     log_file=f"logs/{symbol.lower()}_bot.log",
                 )
                 trader.setup_strategy(existing_position=position)

@@ -1,3 +1,15 @@
 {
-  "trades": []
+  "trades": [
+    {
+      "symbol": "NABIL",
+      "quantity": 100,
+      "buy_price": 600.0,
+      "sell_price": 527.0,
+      "pnl": -7300.0,
+      "pnl_pct": -12.166666666666668,
+      "total_invested": 60000.0,
+      "total_proceeds": 52700.0,
+      "sold_at": "2026-04-30 13:51:31"
+    }
+  ]
 }

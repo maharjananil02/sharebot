@@ -1,2 +1,66 @@
 2026-04-30 00:00:00 NPT - system - INFO - Sample bot log created for repository tracking
 2026-04-30 00:00:01 NPT - system - INFO - Logger configured to Asia/Kathmandu timezone
+2026-04-30 13:51:24 +0545 - src.bot.trailing_stop_strategy - INFO - Initialized Trailing Stop Strategy for NABIL
+2026-04-30 13:51:24 +0545 - src.bot.trailing_stop_strategy - INFO - Entry: 100 shares @ Rs. 600.00
+2026-04-30 13:51:24 +0545 - src.bot.trailing_stop_strategy - INFO - Stop Loss: -10% @ Rs. 540.00
+2026-04-30 13:51:24 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Activation: +10% @ Rs. 660.00
+2026-04-30 13:51:24 +0545 - src.bot.trailing_stop_strategy - INFO - Ladder Triggers: {20: 20, 30: 10}
+2026-04-30 13:51:24 +0545 - src.bot.trailing_stop_strategy - INFO - Seeded existing position: 100 shares @ Rs. 600.00
+2026-04-30 13:51:24 +0545 - src.bot.trailing_stop_strategy - INFO - Stop Loss reset to: Rs. 540.00
+2026-04-30 13:51:24 +0545 - src.bot.portfolio_bot - INFO - Loaded bot for NABIL
+2026-04-30 13:51:24 +0545 - src.bot.portfolio_bot - INFO - Starting portfolio bot manager
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - 
+============================================================
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - Market Analysis - NABIL
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - Current Price: Rs. 527.00
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - Average Entry: Rs. 600.00
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - Highest Price: Rs. 600.00
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - Position: 100 shares | -12.17%
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - Current Stop Loss: Rs. 540.00
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Stop Active: False
+2026-04-30 13:51:27 +0545 - src.bot.trailing_stop_strategy - WARNING - STOP LOSS TRIGGERED! Price hit stop level.
+2026-04-30 13:51:31 +0545 - src.bot.trailing_stop_strategy - INFO - Executing order: SELL_STOP x100 @ Rs. 527.00
+2026-04-30 13:51:31 +0545 - src.bot.trailing_stop_strategy - INFO - Position closed: P&L = Rs. -7300.00 (-12.17%)
+2026-04-30 13:52:33 +0545 - src.bot.trailing_stop_strategy - INFO - Initialized Trailing Stop Strategy for NABIL
+2026-04-30 13:52:33 +0545 - src.bot.trailing_stop_strategy - INFO - Entry: 200 shares @ Rs. 525.00
+2026-04-30 13:52:33 +0545 - src.bot.trailing_stop_strategy - INFO - Stop Loss: -10% @ Rs. 472.50
+2026-04-30 13:52:33 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Activation: +10% @ Rs. 577.50
+2026-04-30 13:52:33 +0545 - src.bot.trailing_stop_strategy - INFO - Ladder Triggers: {20: 20, 30: 10}
+2026-04-30 13:52:33 +0545 - src.bot.trailing_stop_strategy - INFO - Seeded existing position: 200 shares @ Rs. 525.00
+2026-04-30 13:52:33 +0545 - src.bot.trailing_stop_strategy - INFO - Stop Loss reset to: Rs. 472.50
+2026-04-30 13:52:33 +0545 - src.bot.portfolio_bot - INFO - Loaded bot for NABIL
+2026-04-30 13:52:33 +0545 - src.bot.portfolio_bot - INFO - Starting portfolio bot manager
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - 
+============================================================
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - Market Analysis - NABIL
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - Current Price: Rs. 527.00
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - Average Entry: Rs. 525.00
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - Highest Price: Rs. 527.00
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - Position: 200 shares | +0.38%
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - Current Stop Loss: Rs. 472.50
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Stop Active: False
+2026-04-30 13:52:36 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+
+2026-04-30 13:53:01 +0545 - src.bot.trailing_stop_strategy - INFO - Initialized Trailing Stop Strategy for NABIL
+2026-04-30 13:53:01 +0545 - src.bot.trailing_stop_strategy - INFO - Entry: 200 shares @ Rs. 525.00
+2026-04-30 13:53:01 +0545 - src.bot.trailing_stop_strategy - INFO - Stop Loss: -10% @ Rs. 472.50
+2026-04-30 13:53:01 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Activation: +10% @ Rs. 577.50
+2026-04-30 13:53:01 +0545 - src.bot.trailing_stop_strategy - INFO - Ladder Triggers: {20: 20, 30: 10}
+2026-04-30 13:53:01 +0545 - src.bot.trailing_stop_strategy - INFO - Seeded existing position: 200 shares @ Rs. 525.00
+2026-04-30 13:53:01 +0545 - src.bot.trailing_stop_strategy - INFO - Stop Loss reset to: Rs. 472.50
+2026-04-30 13:53:01 +0545 - src.bot.portfolio_bot - INFO - Loaded bot for NABIL
+2026-04-30 13:53:01 +0545 - src.bot.portfolio_bot - INFO - Starting portfolio bot manager
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - 
+============================================================
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - Market Analysis - NABIL
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - Current Price: Rs. 527.00
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - Average Entry: Rs. 525.00
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - Highest Price: Rs. 527.00
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - Position: 200 shares | +0.38%
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - Current Stop Loss: Rs. 472.50
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Stop Active: False
+2026-04-30 13:53:04 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+

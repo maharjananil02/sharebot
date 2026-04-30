@@ -31,25 +31,27 @@ class PositionStoreTests(unittest.TestCase):
                 current_price=120,
                 entry_price=80,
             )
-            saved_path = save_position(position, logs_dir=tmpdir)
+            db_path = str(Path(tmpdir) / "positions.db")
+            saved_path = save_position(position, positions_dir=db_path)
+            self.assertEqual(saved_path, db_path)
             self.assertTrue(Path(saved_path).exists())
 
-            loaded = load_position("bbc", logs_dir=tmpdir)
+            loaded = load_position("bbc", positions_dir=db_path)
             self.assertIsNotNone(loaded)
             self.assertEqual(loaded["symbol"], "BBC")
             self.assertEqual(loaded["shares"], 200)
 
-            listed = list_positions(logs_dir=tmpdir)
+            listed = list_positions(positions_dir=db_path)
             self.assertEqual(len(listed), 1)
             self.assertEqual(listed[0]["symbol"], "BBC")
             self.assertIn("file_path", listed[0])
 
-            file_path = get_position_file_path("BBC", logs_dir=tmpdir)
-            self.assertTrue(Path(file_path).exists())
+            file_path = get_position_file_path("BBC", positions_dir=db_path)
+            self.assertTrue(file_path.startswith("sqlite:///"))
 
-            self.assertTrue(delete_position("BBC", logs_dir=tmpdir))
-            self.assertFalse(Path(file_path).exists())
-            self.assertIsNone(load_position("BBC", logs_dir=tmpdir))
+            self.assertTrue(delete_position("BBC", positions_dir=db_path))
+            self.assertEqual(list_positions(positions_dir=db_path), [])
+            self.assertIsNone(load_position("BBC", positions_dir=db_path))
 
 
 if __name__ == "__main__":

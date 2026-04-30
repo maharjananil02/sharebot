@@ -4,7 +4,7 @@ NEPSE Weekly Buy Streamlit UI
 Features:
 - Weekly buy suggestion button
 - Editable bought price and quantity for suggested shares
-- Save positions as JSON files like gufl_position.json
+- Save positions in a SQLite database for persistence
 - Start/stop an auto bot that resumes from saved JSON entries
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ import streamlit as st
 from src.bot.market_analyzer import MarketAnalyzer
 from src.bot.market_history import WeeklyMarketHistory
 from src.bot.portfolio_bot import PortfolioBotManager
-from src.bot.position_store import build_position_record, list_positions, load_position, save_position, delete_position
+from src.bot.position_store import build_position_record, list_positions, load_position, save_position, delete_position, migrate_positions
 from src.bot.trade_history import get_trade_history, get_trade_statistics, get_trades_by_symbol
 from src.bot.notification import send_email_notification
 
@@ -92,6 +92,16 @@ def load_env_int(key: str, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def get_positions_db_path() -> str:
+    """Return the configured persistent SQLite database path."""
+    return load_env_value("POSITIONS_DB_PATH", "data/nepse_positions.db")
+
+
+def ensure_positions_migrated() -> None:
+    """Copy legacy JSON positions into the SQLite database on first run."""
+    migrate_positions(source_dirs=["logs", load_env_value("POSITIONS_DIR", "data/positions")], target_dir=get_positions_db_path())
 
 
 def save_env_values(values: dict[str, str], env_file: str = ENV_FILE) -> None:
@@ -188,6 +198,8 @@ bot_interval_seconds = st.sidebar.number_input(
 
 st.sidebar.info("The bot uses the saved JSON entry price and quantity, just like the GUFL position file.")
 
+ensure_positions_migrated()
+
 st.sidebar.markdown("---")
 st.sidebar.subheader("Email Alerts")
 with st.sidebar.form("email_settings_form"):
@@ -275,7 +287,7 @@ def build_suggestion_dataframe(suggestions):
 
 
 def refresh_positions_df():
-    positions = list_positions()
+    positions = list_positions(get_positions_db_path())
     if not positions:
         return pd.DataFrame(columns=["symbol", "shares", "avg_cost", "total_invested", "cash", "current_price", "entry_price", "saved_at"])
 
@@ -300,7 +312,7 @@ def refresh_positions_df():
 def ensure_bot_manager():
     manager = st.session_state.bot_manager
     if manager is None:
-        manager = PortfolioBotManager(check_interval_seconds=int(bot_interval_seconds))
+        manager = PortfolioBotManager(positions_db_path=get_positions_db_path(), check_interval_seconds=int(bot_interval_seconds))
         st.session_state.bot_manager = manager
     return manager
 
@@ -308,6 +320,7 @@ def ensure_bot_manager():
 def start_auto_bot(manager: PortfolioBotManager, force_reload: bool = True) -> bool:
     """Start the background auto bot if saved positions exist."""
     manager.check_interval_seconds = int(bot_interval_seconds)
+    manager.positions_db_path = get_positions_db_path()
     manager.load_traders(force=force_reload)
     if not manager.traders:
         return False
@@ -339,6 +352,7 @@ def sync_market_hours_bot() -> None:
     """Auto-start the bot during market hours unless the user stopped it manually."""
     manager = ensure_bot_manager()
     manager.check_interval_seconds = int(bot_interval_seconds)
+    manager.positions_db_path = get_positions_db_path()
 
     if not is_market_open():
         st.session_state.bot_auto_disabled = False
@@ -347,7 +361,7 @@ def sync_market_hours_bot() -> None:
     if st.session_state.bot_auto_disabled or manager.running:
         return
 
-    if list_positions() and start_auto_bot(manager, force_reload=True):
+    if list_positions(get_positions_db_path()) and start_auto_bot(manager, force_reload=True):
         st.info(f"🚀 Auto bot started during market hours ({len(manager.traders)} position(s))")
 
 
@@ -383,7 +397,7 @@ with col1:
             st.session_state.suggestions_df = build_suggestion_dataframe(suggestions)
 
 with col2:
-    st.metric("Saved positions", len(list_positions()))
+    st.metric("Saved positions", len(list_positions(get_positions_db_path())))
 
 if st.session_state.last_analysis:
     info = st.session_state.last_analysis
@@ -448,7 +462,7 @@ with tab_suggest:
                     source="streamlit",
                     bought_via="weekly_suggestion",
                 )
-                saved_path = save_position(position)
+                saved_path = save_position(position, positions_dir=get_positions_db_path())
                 saved_files.append(saved_path)
 
             if saved_files:
@@ -463,6 +477,7 @@ with tab_positions:
 
     manager = ensure_bot_manager()
     manager.check_interval_seconds = int(bot_interval_seconds)
+    manager.positions_db_path = get_positions_db_path()
 
     bot_status_col1, bot_status_col2, bot_status_col3, bot_status_col4 = st.columns(4)
     with bot_status_col1:
@@ -520,7 +535,7 @@ with tab_positions:
                         entry_price=float(new_price),
                         source="streamlit_manual",
                     )
-                    saved_path = save_position(position)
+                    saved_path = save_position(position, positions_dir=get_positions_db_path())
                     st.session_state.position_added = True
                     st.session_state.last_added_position = new_symbol
                     with st.empty():
@@ -545,7 +560,7 @@ with tab_positions:
         st.markdown("### Edit Position")
         symbol_options = positions_df["symbol"].dropna().astype(str).tolist()
         selected_symbol = st.selectbox("Select position to edit", symbol_options, key="edit_selector")
-        preview = load_position(selected_symbol)
+        preview = load_position(selected_symbol, positions_dir=get_positions_db_path())
         if preview:
             st.markdown(f"**{selected_symbol} Position**")
 
@@ -600,7 +615,7 @@ with tab_positions:
                     current_price=float(edit_current),
                     entry_price=float(edit_price),
                 )
-                save_position(updated_position)
+                save_position(updated_position, positions_dir=get_positions_db_path())
 
                 if bot_was_running and is_market_open():
                     start_auto_bot(manager, force_reload=True)
@@ -613,7 +628,7 @@ with tab_positions:
                 if bot_was_running:
                     stop_auto_bot(manager, suppress_save=True)
 
-                delete_position(selected_symbol)
+                delete_position(selected_symbol, positions_dir=get_positions_db_path())
                 
                 # Remove the trader from memory to prevent it from writing files after deletion
                 if selected_symbol in manager.traders:
@@ -666,7 +681,7 @@ with tab_bot:
     with btn_reload:
         if st.button("Reload Positions", use_container_width=True):
             manager.load_traders(force=True)
-            st.info("Reloaded positions from JSON files.")
+            st.info("Reloaded positions from SQLite database.")
 
     if st.session_state.bot_started_at:
         st.info(f"Bot started at: {st.session_state.bot_started_at}")
