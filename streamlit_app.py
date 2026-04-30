@@ -191,9 +191,9 @@ min_volume = st.sidebar.number_input(
 max_suggestions = st.sidebar.selectbox("Suggested shares", [5], index=0)
 bot_interval_seconds = st.sidebar.number_input(
     "Auto bot check interval (seconds)",
-    min_value=60,
-    value=load_env_int("BOT_CHECK_INTERVAL_SECONDS", 300),
-    step=60,
+    min_value=30,
+    value=load_env_int("BOT_CHECK_INTERVAL_SECONDS", 30),
+    step=30,
 )
 
 st.sidebar.info("The bot uses the saved JSON entry price and quantity, just like the GUFL position file.")
