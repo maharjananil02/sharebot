@@ -1,20 +1,30 @@
-"""Logging configuration for the trading bot"""
+"""Logging configuration for the trading bot with Nepal timezone timestamps."""
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
-NEPAL_TZ = timezone(timedelta(hours=5, minutes=45))
-
-
-def _nepal_time_converter(timestamp: float):
-    """Convert epoch timestamp to Nepal local timetuple for logging."""
-    return datetime.fromtimestamp(timestamp, tz=NEPAL_TZ).timetuple()
+NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 
 
 def _now_nepal() -> datetime:
     """Return current datetime in Nepal timezone."""
     return datetime.now(tz=NEPAL_TZ)
+
+
+class NepalFormatter(logging.Formatter):
+    """Custom formatter that formats times in Nepal timezone."""
+
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, tz=NEPAL_TZ)
+        if datefmt:
+            try:
+                return dt.strftime(datefmt)
+            except Exception:
+                pass
+        # Fallback ISO format
+        return dt.isoformat()
 
 
 def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
@@ -32,11 +42,9 @@ def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
     logs_dir = "logs"
     os.makedirs(logs_dir, exist_ok=True)
 
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    formatter.converter = _nepal_time_converter
+    fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S %Z"
+    formatter = NepalFormatter(fmt=fmt, datefmt=datefmt)
 
     if add_console:
         console_handler = logging.StreamHandler()
@@ -54,6 +62,7 @@ def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
 
     logger._bot_logger_configured = True
     return logger
+
 
 # Create module logger
 logger = setup_logger(__name__)
