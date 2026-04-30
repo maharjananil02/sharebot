@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -27,8 +28,13 @@ ENV_FILE = ".env"
 
 
 def is_market_open() -> bool:
-    """Check if NEPSE is open (9 AM to 3 PM, Monday to Friday)"""
-    now = datetime.now()
+    """Check if NEPSE is open based on Nepal time (Monday to Friday)."""
+    timezone_name = load_env_value("MARKET_TIMEZONE", "Asia/Kathmandu")
+    try:
+        now = datetime.now(ZoneInfo(timezone_name))
+    except Exception:
+        now = datetime.now(ZoneInfo("Asia/Kathmandu"))
+
     weekday = now.weekday()  # 0=Monday, 6=Sunday
     hour = now.hour
     
@@ -36,8 +42,9 @@ def is_market_open() -> bool:
     if weekday >= 5:  # Saturday or Sunday
         return False
     
-    # Market opens at 9 AM and closes at 3 PM (15:00)
-    return 9 <= hour < 15
+    open_hour = load_env_int("MARKET_OPEN_HOUR", 9)
+    close_hour = load_env_int("MARKET_CLOSE_HOUR", 15)
+    return open_hour <= hour < close_hour
 
 
 def read_log_file(symbol: str, logs_dir: str = "logs") -> str:
