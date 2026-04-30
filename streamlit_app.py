@@ -107,6 +107,27 @@ def ensure_positions_migrated() -> None:
     migrate_positions(source_dirs=["logs", load_env_value("POSITIONS_DIR", "data/positions")], target_dir=get_positions_db_path())
 
 
+def check_storage_health() -> None:
+    """Display which storage target is active and whether it can be queried."""
+    try:
+        from src.bot import position_store as ps
+
+        target = get_positions_db_path()
+        is_postgres = ps._is_postgres_target(target)
+        try:
+            positions = ps.list_positions(target)
+            count = len(positions)
+            if is_postgres:
+                st.sidebar.success(f"Storage: Postgres ({target.split('@')[-1]}) — {count} positions")
+            else:
+                st.sidebar.success(f"Storage: SQLite ({target}) — {count} positions")
+        except Exception as e:
+            st.sidebar.error(f"Storage connection error: {str(e)}")
+    except Exception:
+        # Fail silently if position_store import isn't available for some reason
+        pass
+
+
 def save_env_values(values: dict[str, str], env_file: str = ENV_FILE) -> None:
     """Update or append key/value pairs in .env."""
     existing_lines = []
