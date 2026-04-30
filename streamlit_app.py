@@ -95,11 +95,8 @@ def load_env_int(key: str, default: int) -> int:
 
 
 def get_positions_db_path() -> str:
-    """Return the configured persistent storage target for positions."""
-    return load_env_value(
-        "POSITIONS_DB_URL",
-        load_env_value("POSITIONS_DB_PATH", "data/nepse_positions.db"),
-    )
+    """Return the configured positions directory (legacy file-based storage)."""
+    return load_env_value("POSITIONS_DIR", "logs")
 
 
 def ensure_positions_migrated() -> None:

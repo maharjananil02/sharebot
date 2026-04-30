@@ -20,7 +20,7 @@ load_dotenv()
 from .trailing_stop_strategy import TrailingStopStrategy
 from .paper_trader import PaperTrader
 from .logger import setup_logger
-from .position_store import delete_position, load_position, save_position, _is_postgres_target
+from .position_store import delete_position, load_position, save_position
 from .trade_history import record_trade
 from .notification import send_email_notification
 
@@ -29,18 +29,17 @@ class StockPaperTrader:
     """Generic paper trader for any stock symbol"""
     
     def __init__(self, symbol: str = "NABIL", check_interval: int = 900, log_file: str = None, positions_db_path: str = None):
-        """
-        Initialize stock paper trader
-        
+        """Initialize stock paper trader
+
         Args:
             symbol: Stock symbol (e.g., "NABIL", "GUFL") - default NABIL
             check_interval: Check price every N seconds (default 900 = 15 minutes)
             log_file: Log file path (default logs/{symbol}.log)
-            positions_db_path: SQLite database used to persist position state
+            positions_db_path: directory used to persist position JSON files (default from POSITIONS_DIR or 'logs')
         """
         self.symbol = symbol.upper()
         self.check_interval = check_interval
-        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DB_PATH", "data/nepse_positions.db")
+        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DIR", "logs")
         self.log_file = log_file or f"logs/{self.symbol.lower()}.log"
         self.position_state_file = self.positions_db_path
         
@@ -205,10 +204,8 @@ class StockPaperTrader:
             "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        save_position(state, positions_dir=self.positions_db_path)
-        # Log actual storage type to avoid confusion when running with Postgres
-        storage_label = "Postgres" if _is_postgres_target(str(self.positions_db_path)) else "SQLite"
-        self.logger.info(f"Saved open position to {storage_label} DB {self.positions_db_path}")
+        saved_path = save_position(state, positions_dir=self.positions_db_path)
+        self.logger.info(f"Saved open position to file {saved_path}")
 
     def _has_open_position(self) -> bool:
         """Return True if the trader still holds shares for this symbol."""

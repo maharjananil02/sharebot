@@ -25,7 +25,7 @@ class PortfolioBotManager:
     """Monitor one or more saved positions with auto bot logic."""
 
     def __init__(self, positions_db_path: str = None, check_interval_seconds: int = 900):
-        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DB_PATH", "data/nepse_positions.db")
+        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DIR", "logs")
         self.check_interval_seconds = int(check_interval_seconds)
         self.logger = logger
         self.traders: Dict[str, StockPaperTrader] = {}

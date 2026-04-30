@@ -38,13 +38,8 @@ env/
 *~
 
 # Logs
-# keep most log files ignored but allow the `logs/` folder and specific bot logs to be tracked
 *.log
-
-# Re-include logs directory and bot logs in the repository
-!logs/
-!logs/.gitkeep
-!logs/bot_*.log
+logs/
 
 # Browser drivers
 chromedriver
