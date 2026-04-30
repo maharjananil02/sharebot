@@ -1,7 +1,20 @@
 """Logging configuration for the trading bot"""
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+
+NEPAL_TZ = timezone(timedelta(hours=5, minutes=45))
+
+
+def _nepal_time_converter(timestamp: float):
+    """Convert epoch timestamp to Nepal local timetuple for logging."""
+    return datetime.fromtimestamp(timestamp, tz=NEPAL_TZ).timetuple()
+
+
+def _now_nepal() -> datetime:
+    """Return current datetime in Nepal timezone."""
+    return datetime.now(tz=NEPAL_TZ)
 
 
 def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
@@ -23,6 +36,7 @@ def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    formatter.converter = _nepal_time_converter
 
     if add_console:
         console_handler = logging.StreamHandler()
@@ -31,7 +45,7 @@ def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
         logger.addHandler(console_handler)
 
     if log_file is None:
-        log_file = os.path.join(logs_dir, f"bot_{datetime.now().strftime('%Y%m%d')}.log")
+        log_file = os.path.join(logs_dir, f"bot_{_now_nepal().strftime('%Y%m%d')}.log")
 
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(log_level)
