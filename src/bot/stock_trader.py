@@ -20,7 +20,7 @@ load_dotenv()
 from .trailing_stop_strategy import TrailingStopStrategy
 from .paper_trader import PaperTrader
 from .logger import setup_logger
-from .position_store import delete_position, load_position, save_position
+from .position_store import delete_position, load_position, save_position, _is_postgres_target
 from .trade_history import record_trade
 from .notification import send_email_notification
 
@@ -206,7 +206,9 @@ class StockPaperTrader:
         }
 
         save_position(state, positions_dir=self.positions_db_path)
-        self.logger.info(f"Saved open position to SQLite DB {self.positions_db_path}")
+        # Log actual storage type to avoid confusion when running with Postgres
+        storage_label = "Postgres" if _is_postgres_target(str(self.positions_db_path)) else "SQLite"
+        self.logger.info(f"Saved open position to {storage_label} DB {self.positions_db_path}")
 
     def _has_open_position(self) -> bool:
         """Return True if the trader still holds shares for this symbol."""
