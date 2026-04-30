@@ -1,14 +1,19 @@
-"""SQLite-backed position storage helpers for Streamlit and paper trading."""
+"""Database-backed position storage helpers for Streamlit and paper trading."""
 from __future__ import annotations
 
 import glob
 import json
 import os
-import shutil
 import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional
 
+try:
+    import psycopg2
+except ImportError:  # pragma: no cover - optional dependency for Postgres support
+    psycopg2 = None
+
+DEFAULT_POSITIONS_DB_URL = os.getenv("POSITIONS_DB_URL") or os.getenv("DATABASE_URL")
 DEFAULT_POSITIONS_DB_PATH = os.getenv("POSITIONS_DB_PATH", "data/nepse_positions.db")
 DEFAULT_LEGACY_POSITIONS_DIR = os.getenv("POSITIONS_DIR", "data/positions")
 
@@ -19,9 +24,15 @@ def _normalize_symbol(symbol: str) -> str:
     return symbol.strip().upper()
 
 
-def _resolve_db_path(db_path: Optional[str] = None) -> str:
-    """Return the active SQLite database path, honoring environment overrides."""
-    return db_path or os.getenv("POSITIONS_DB_PATH", DEFAULT_POSITIONS_DB_PATH)
+def _resolve_storage_target(storage_target: Optional[str] = None) -> str:
+    """Return the active storage target (Postgres URL or SQLite path)."""
+    if storage_target:
+        return storage_target
+    return DEFAULT_POSITIONS_DB_URL or DEFAULT_POSITIONS_DB_PATH
+
+
+def _is_postgres_target(storage_target: str) -> bool:
+    return storage_target.startswith("postgresql://") or storage_target.startswith("postgres://")
 
 
 def _ensure_parent_dir(path: str) -> None:
@@ -30,11 +41,31 @@ def _ensure_parent_dir(path: str) -> None:
         os.makedirs(directory, exist_ok=True)
 
 
-def _connect(db_path: Optional[str] = None) -> sqlite3.Connection:
-    """Open a SQLite connection and create the positions table if needed."""
-    resolved_path = _resolve_db_path(db_path)
-    _ensure_parent_dir(resolved_path)
-    conn = sqlite3.connect(resolved_path)
+def _connect(storage_target: Optional[str] = None):
+    """Open a database connection and create the positions table if needed."""
+    resolved_target = _resolve_storage_target(storage_target)
+
+    if _is_postgres_target(resolved_target):
+        if psycopg2 is None:
+            raise RuntimeError("psycopg2-binary is required for Postgres storage")
+
+        conn = psycopg2.connect(resolved_target)
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS positions (
+                    symbol TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    shares INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+        conn.commit()
+        return conn
+
+    _ensure_parent_dir(resolved_target)
+    conn = sqlite3.connect(resolved_target)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(
@@ -56,7 +87,10 @@ def get_position_file_path(symbol: str, positions_dir: Optional[str] = None) -> 
     Kept for backwards compatibility with existing tests/UI code.
     """
     symbol = _normalize_symbol(symbol)
-    return f"sqlite:///{_resolve_db_path(positions_dir)}#{symbol.lower()}"
+    storage_target = _resolve_storage_target(positions_dir)
+    if _is_postgres_target(storage_target):
+        return f"{storage_target}#{symbol.lower()}"
+    return f"sqlite:///{storage_target}#{symbol.lower()}"
 
 
 def build_position_record(
@@ -105,7 +139,7 @@ def build_position_record(
 
 
 def save_position(position: Dict, positions_dir: Optional[str] = None) -> str:
-    """Save a position dictionary to SQLite and return the database path."""
+    """Save a position dictionary to the configured database and return its target."""
     symbol = _normalize_symbol(position.get("symbol"))
 
     position_to_save = dict(position)
@@ -115,9 +149,26 @@ def save_position(position: Dict, positions_dir: Optional[str] = None) -> str:
     payload = json.dumps(position_to_save, ensure_ascii=False)
     shares = int(position_to_save.get("shares", 0) or 0)
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    db_path = _resolve_db_path(positions_dir)
+    storage_target = _resolve_storage_target(positions_dir)
 
-    with _connect(db_path) as conn:
+    if _is_postgres_target(storage_target):
+        with _connect(storage_target) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO positions (symbol, payload, shares, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT(symbol) DO UPDATE SET
+                        payload = EXCLUDED.payload,
+                        shares = EXCLUDED.shares,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (symbol, payload, shares, updated_at),
+                )
+            conn.commit()
+        return storage_target
+
+    with _connect(storage_target) as conn:
         conn.execute(
             """
             INSERT INTO positions (symbol, payload, shares, updated_at)
@@ -131,58 +182,73 @@ def save_position(position: Dict, positions_dir: Optional[str] = None) -> str:
         )
         conn.commit()
 
-    return db_path
+    return storage_target
 
 
 def load_position(symbol: str, positions_dir: Optional[str] = None) -> Optional[Dict]:
     """Load a saved position for a symbol, if it exists."""
     symbol = _normalize_symbol(symbol)
-    db_path = _resolve_db_path(positions_dir)
+    storage_target = _resolve_storage_target(positions_dir)
 
     try:
-        with _connect(db_path) as conn:
-            row = conn.execute(
-                "SELECT payload FROM positions WHERE symbol = ?",
-                (symbol,),
-            ).fetchone()
-    except sqlite3.Error:
+        with _connect(storage_target) as conn:
+            if _is_postgres_target(storage_target):
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT payload FROM positions WHERE symbol = %s", (symbol,))
+                    row = cursor.fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT payload FROM positions WHERE symbol = ?",
+                    (symbol,),
+                ).fetchone()
+    except Exception:
         return None
 
     if not row:
         return None
 
     try:
-        data = json.loads(row["payload"])
+        payload = row[0] if _is_postgres_target(storage_target) else row["payload"]
+        data = json.loads(payload)
     except (TypeError, json.JSONDecodeError):
         return None
 
     if not data.get("symbol"):
         return None
 
-    data["storage_path"] = db_path
-    data["file_path"] = f"sqlite:///{db_path}#{symbol.lower()}"
+    data["storage_path"] = storage_target
+    data["file_path"] = get_position_file_path(symbol, positions_dir=storage_target)
     return data
 
 
 def list_positions(positions_dir: Optional[str] = None) -> List[Dict]:
-    """Return all saved positions from SQLite."""
-    db_path = _resolve_db_path(positions_dir)
+    """Return all saved positions from the configured database."""
+    storage_target = _resolve_storage_target(positions_dir)
     positions: List[Dict] = []
 
     try:
-        with _connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT payload, shares FROM positions WHERE shares > 0 ORDER BY symbol"
-            ).fetchall()
-    except sqlite3.Error:
+        with _connect(storage_target) as conn:
+            if _is_postgres_target(storage_target):
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT payload, shares FROM positions WHERE shares > 0 ORDER BY symbol"
+                    )
+                    rows = cursor.fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT payload, shares FROM positions WHERE shares > 0 ORDER BY symbol"
+                ).fetchall()
+    except Exception:
         return positions
 
     for row in rows:
         try:
-            data = json.loads(row["payload"])
-            if data.get("symbol") and int(row["shares"]) > 0:
-                data["storage_path"] = db_path
-                data["file_path"] = f"sqlite:///{db_path}#{str(data['symbol']).lower()}"
+            payload = row[0] if _is_postgres_target(storage_target) else row["payload"]
+            shares = row[1] if _is_postgres_target(storage_target) else row["shares"]
+            data = json.loads(payload)
+            if data.get("symbol") and int(shares) > 0:
+                data["storage_path"] = storage_target
+                data["file_path"] = get_position_file_path(str(data["symbol"]), positions_dir=storage_target)
                 positions.append(data)
         except (TypeError, json.JSONDecodeError, ValueError):
             continue
@@ -191,17 +257,23 @@ def list_positions(positions_dir: Optional[str] = None) -> List[Dict]:
 
 
 def delete_position(symbol: str, positions_dir: Optional[str] = None) -> bool:
-    """Delete a saved position from SQLite and clean up legacy files."""
+    """Delete a saved position from the configured database and clean up legacy files."""
     symbol = _normalize_symbol(symbol)
-    db_path = _resolve_db_path(positions_dir)
+    storage_target = _resolve_storage_target(positions_dir)
     removed_any = False
 
     try:
-        with _connect(db_path) as conn:
-            cursor = conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
-            conn.commit()
-            removed_any = cursor.rowcount > 0
-    except sqlite3.Error:
+        with _connect(storage_target) as conn:
+            if _is_postgres_target(storage_target):
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM positions WHERE symbol = %s", (symbol,))
+                    removed_any = cursor.rowcount > 0
+                conn.commit()
+            else:
+                cursor = conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+                conn.commit()
+                removed_any = cursor.rowcount > 0
+    except Exception:
         pass
 
     # Remove associated bot log file
@@ -233,13 +305,19 @@ def migrate_positions(source_dirs: Optional[List[str]] = None, target_dir: Optio
     By default, this migrates from `logs/` and from the older JSON storage
     directory used before SQLite was introduced.
     """
-    db_path = _resolve_db_path(target_dir)
-    _ensure_parent_dir(db_path)
+    storage_target = _resolve_storage_target(target_dir)
+    if not _is_postgres_target(storage_target):
+        _ensure_parent_dir(storage_target)
 
     try:
-        with _connect(db_path) as conn:
-            existing_count = conn.execute("SELECT COUNT(1) AS count FROM positions").fetchone()["count"]
-    except sqlite3.Error:
+        with _connect(storage_target) as conn:
+            if _is_postgres_target(storage_target):
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(1) FROM positions")
+                    existing_count = cursor.fetchone()[0]
+            else:
+                existing_count = conn.execute("SELECT COUNT(1) AS count FROM positions").fetchone()["count"]
+    except Exception:
         existing_count = 0
 
     if existing_count:
@@ -262,7 +340,7 @@ def migrate_positions(source_dirs: Optional[List[str]] = None, target_dir: Optio
                     data = json.load(file)
                 if not data.get("symbol"):
                     continue
-                save_position(data, positions_dir=db_path)
+                save_position(data, positions_dir=storage_target)
                 copied_sources.append(source_path)
             except (OSError, json.JSONDecodeError, ValueError, TypeError):
                 continue

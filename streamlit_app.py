@@ -4,7 +4,7 @@ NEPSE Weekly Buy Streamlit UI
 Features:
 - Weekly buy suggestion button
 - Editable bought price and quantity for suggested shares
-- Save positions in a SQLite database for persistence
+- Save positions in a database for persistence
 - Start/stop an auto bot that resumes from saved JSON entries
 """
 from __future__ import annotations
@@ -95,12 +95,15 @@ def load_env_int(key: str, default: int) -> int:
 
 
 def get_positions_db_path() -> str:
-    """Return the configured persistent SQLite database path."""
-    return load_env_value("POSITIONS_DB_PATH", "data/nepse_positions.db")
+    """Return the configured persistent storage target for positions."""
+    return load_env_value(
+        "POSITIONS_DB_URL",
+        load_env_value("POSITIONS_DB_PATH", "data/nepse_positions.db"),
+    )
 
 
 def ensure_positions_migrated() -> None:
-    """Copy legacy JSON positions into the SQLite database on first run."""
+    """Copy legacy JSON positions into the configured database on first run."""
     migrate_positions(source_dirs=["logs", load_env_value("POSITIONS_DIR", "data/positions")], target_dir=get_positions_db_path())
 
 
@@ -681,7 +684,7 @@ with tab_bot:
     with btn_reload:
         if st.button("Reload Positions", use_container_width=True):
             manager.load_traders(force=True)
-            st.info("Reloaded positions from SQLite database.")
+            st.info("Reloaded positions from the database.")
 
     if st.session_state.bot_started_at:
         st.info(f"Bot started at: {st.session_state.bot_started_at}")
