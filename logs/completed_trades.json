@@ -10,17 +10,6 @@
       "total_invested": 60000.0,
       "total_proceeds": 52700.0,
       "sold_at": "2026-04-30 13:51:31"
-    },
-    {
-      "symbol": "NABIL",
-      "quantity": 200,
-      "buy_price": 2300.0,
-      "sell_price": 528.0,
-      "pnl": -354400.0,
-      "pnl_pct": -77.04347826086956,
-      "total_invested": 460000.0,
-      "total_proceeds": 105600.0,
-      "sold_at": "2026-04-30 16:55:31"
     }
   ]
 }

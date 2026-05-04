@@ -161,3 +161,39 @@
 2026-04-30 17:20:06 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Stop Active: True
 2026-04-30 17:20:06 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
 
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - 
+============================================================
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - Market Analysis - GUFL
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - Current Price: Rs. 518.20
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - Average Entry: Rs. 100.00
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - Highest Price: Rs. 518.20
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - Position: 200 shares | +418.20%
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - Current Stop Loss: Rs. 492.29
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Stop Active: True
+2026-04-30 17:25:06 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - 
+============================================================
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - Market Analysis - GUFL
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - Current Price: Rs. 518.20
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - Average Entry: Rs. 100.00
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - Highest Price: Rs. 518.20
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - Position: 200 shares | +418.20%
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - Current Stop Loss: Rs. 492.29
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Stop Active: True
+2026-04-30 17:30:05 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - 
+============================================================
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - Market Analysis - GUFL
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - Current Price: Rs. 518.20
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - Average Entry: Rs. 100.00
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - Highest Price: Rs. 518.20
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - Position: 200 shares | +418.20%
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - Current Stop Loss: Rs. 492.29
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - Trailing Stop Active: True
+2026-04-30 17:43:58 +0545 - src.bot.trailing_stop_strategy - INFO - ============================================================
+
