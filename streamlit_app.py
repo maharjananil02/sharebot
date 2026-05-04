@@ -20,7 +20,7 @@ from src.bot.market_analyzer import MarketAnalyzer
 from src.bot.market_history import WeeklyMarketHistory
 from src.bot.portfolio_bot import PortfolioBotManager
 from src.bot.position_store import build_position_record, list_positions, load_position, save_position, delete_position, migrate_positions
-from src.bot.trade_history import get_trade_history, get_trade_statistics, get_trades_by_symbol
+from src.bot.trade_history import get_trade_history, get_trade_statistics, get_trades_by_symbol, delete_trade
 from src.bot.notification import send_email_notification
 
 # Try to import legacy trade migration (available in newer versions)
@@ -211,59 +211,18 @@ if migrate_legacy_trades:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Email Alerts")
-with st.sidebar.form("email_settings_form"):
-    email_smtp = st.text_input("SMTP server", value=load_env_value("EMAIL_SMTP", "smtp.gmail.com"), placeholder="smtp.gmail.com")
-    email_port = st.text_input("SMTP port", value=load_env_value("EMAIL_PORT", "465"), placeholder="465")
-    email_user = st.text_input("Email user", value=load_env_value("EMAIL_USER"), placeholder="your_email@gmail.com")
-    email_pass = st.text_input("Email app password", value=load_env_value("EMAIL_PASS"), type="password", placeholder="Google app password")
-    email_to = st.text_input("Notify email to", value=load_env_value("EMAIL_TO"), placeholder="recipient@gmail.com")
-
-    save_email_settings = st.form_submit_button("Save Email Settings", use_container_width=True)
-    test_email = st.form_submit_button("Send Test Email", use_container_width=True)
-
-    if save_email_settings:
-        try:
-            save_env_values(
-                {
-                    "EMAIL_SMTP": email_smtp.strip(),
-                    "EMAIL_PORT": email_port.strip(),
-                    "EMAIL_USER": email_user.strip(),
-                    "EMAIL_PASS": email_pass.strip(),
-                    "EMAIL_TO": email_to.strip(),
-                }
-            )
-            st.success("Email settings saved to .env")
-        except Exception as e:
-            st.error(f"Failed to save email settings: {str(e)}")
-
-    if test_email:
-        try:
-            saved_smtp = email_smtp.strip()
-            saved_port = email_port.strip()
-            saved_user = email_user.strip()
-            saved_pass = email_pass.strip()
-            saved_to = email_to.strip()
-
-            save_env_values(
-                {
-                    "EMAIL_SMTP": saved_smtp,
-                    "EMAIL_PORT": saved_port,
-                    "EMAIL_USER": saved_user,
-                    "EMAIL_PASS": saved_pass,
-                    "EMAIL_TO": saved_to,
-                }
-            )
-
-            sent = send_email_notification(
-                subject="NEPSE Bot Test Email",
-                body="This is a test email from NEPSE Weekly Buy Bot. If you received this, Gmail setup is working.",
-            )
-            if sent:
-                st.success("Test email sent successfully")
-            else:
-                st.error("Test email failed. Check Gmail app password and SMTP settings.")
-        except Exception as e:
-            st.error(f"Test email failed: {str(e)}")
+if st.sidebar.button("Send Test Email", use_container_width=True):
+    try:
+        sent = send_email_notification(
+            subject="NEPSE Bot Test Email",
+            body="This is a test email from NEPSE Weekly Buy Bot. If you received this, Gmail setup is working.",
+        )
+        if sent:
+            st.sidebar.success("Test email sent successfully")
+        else:
+            st.sidebar.error("Test email failed. Check EMAIL_SMTP, EMAIL_PORT, EMAIL_USER, EMAIL_PASS, and EMAIL_TO environment variables.")
+    except Exception as e:
+        st.sidebar.error(f"Test email failed: {str(e)}")
 
 history_store = WeeklyMarketHistory()
 
@@ -563,7 +522,14 @@ with tab_positions:
     st.divider()
     positions_df = refresh_positions_df()
     
-    st.markdown("### View & Edit")
+    col_view1, col_view2 = st.columns([4, 1])
+    with col_view1:
+        st.markdown("### View & Edit")
+    with col_view2:
+        if st.button("🔄 Refresh", use_container_width=True, key="refresh_positions"):
+            positions_df = refresh_positions_df()
+            st.rerun()
+    
     st.dataframe(positions_df, use_container_width=True, hide_index=True)
 
     if not positions_df.empty:
@@ -769,9 +735,39 @@ with tab_history:
         trades_df = pd.DataFrame(trades_display)
         st.dataframe(trades_df, use_container_width=True, hide_index=True)
         
+        # Get all unique symbols
+        all_symbols = list(set(trade["symbol"] for trade in trades))
+        
+        # Delete trades section
+        st.markdown("### Delete Trades")
+        del_col1, del_col2 = st.columns(2)
+        with del_col1:
+            selected_del_sym = st.selectbox("Delete all trades for a symbol", 
+                                           ["Select symbol..."] + sorted(all_symbols), 
+                                           key="delete_symbol_filter")
+            if selected_del_sym != "Select symbol...":
+                sym_trades_to_delete = get_trades_by_symbol(selected_del_sym)
+                if st.button(f"Delete all {selected_del_sym} trades ({len(sym_trades_to_delete)} trades)", 
+                            key=f"delete_all_{selected_del_sym}",
+                            help=f"Permanently delete all {len(sym_trades_to_delete)} trades for {selected_del_sym}"):
+                    deleted_count = 0
+                    for trade in sym_trades_to_delete:
+                        if delete_trade(trade.get('id'), logs_dir=None):
+                            deleted_count += 1
+                    st.success(f"✅ Deleted {deleted_count} trades for {selected_del_sym}")
+                    st.rerun()
+        
+        with del_col2:
+            if st.button("🗑️ Clear All Trades", key="clear_all_trades", help="Permanently delete all trade history"):
+                from src.bot.trade_history import clear_trade_history
+                if clear_trade_history(logs_dir=None):
+                    st.success("✅ All trade history cleared")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to clear trade history")
+        
         # Filter by symbol
         st.markdown("### Filter by Symbol")
-        all_symbols = list(set(trade["symbol"] for trade in trades))
         selected_sym = st.selectbox("Select symbol to view trades", ["All Symbols"] + sorted(all_symbols), key="history_symbol_filter")
         
         if selected_sym != "All Symbols":
@@ -816,6 +812,17 @@ with tab_history:
                         pnl_color = "green" if selected_trade['pnl'] >= 0 else "red"
                         st.metric("P&L", f"Rs. {selected_trade['pnl']:,.2f}", 
                                  delta=f"{selected_trade['pnl_pct']:+.2f}%")
+                    
+                    # Delete trade option
+                    st.divider()
+                    dcol1, dcol2 = st.columns([3, 1])
+                    with dcol2:
+                        if st.button("🗑️ Delete Trade", key=f"delete_trade_{selected_trade.get('id', trade_idx)}", help="Permanently delete this trade record"):
+                            if delete_trade(selected_trade.get('id'), logs_dir=None):
+                                st.success(f"✅ Trade deleted successfully")
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to delete trade")
                 
                 # Calculate symbol statistics
                 sym_stats = {

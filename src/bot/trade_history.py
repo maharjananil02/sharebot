@@ -199,6 +199,17 @@ def clear_trade_history(logs_dir: str = None) -> bool:
         return False
 
 
+def delete_trade(trade_id: int, logs_dir: str = None) -> bool:
+    """Delete a specific trade by ID."""
+    try:
+        with _get_connection(logs_dir) as conn:
+            conn.execute("DELETE FROM trades WHERE id = ?", (trade_id,))
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
 def migrate_legacy_trades(source_json_path: str = "logs/completed_trades.json", target_db: str = None) -> int:
     """Migrate trades from legacy JSON file to SQLite."""
     if not os.path.exists(source_json_path):
