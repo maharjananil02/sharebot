@@ -55,4 +55,10 @@ htmlcov/
 
 # Project specific
 screenshots/
-data/
+# Database files (but keep folder structure with .gitkeep)
+data/*.db
+data/**/*.db
+data/*.db-shm
+data/**/*.db-shm
+data/*.db-wal
+data/**/*.db-wal
