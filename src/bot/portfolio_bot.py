@@ -1,7 +1,6 @@
-"""
-Portfolio bot manager.
+"""Portfolio bot manager.
 
-Runs one or more StockPaperTrader instances against saved JSON positions.
+Runs one or more StockPaperTrader instances against saved SQLite positions.
 This is designed for Streamlit so the UI can start/stop a background monitor
 without relying on the global schedule loop.
 """
@@ -25,7 +24,7 @@ class PortfolioBotManager:
     """Monitor one or more saved positions with auto bot logic."""
 
     def __init__(self, positions_db_path: str = None, check_interval_seconds: int = 900):
-        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DIR", "logs")
+        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DB_PATH") or os.getenv("POSITIONS_DIR", "data/positions.db")
         self.check_interval_seconds = int(check_interval_seconds)
         self.logger = logger
         self.traders: Dict[str, StockPaperTrader] = {}
@@ -37,7 +36,7 @@ class PortfolioBotManager:
         self.suppress_save_on_stop = False
 
     def load_traders(self, force: bool = False) -> Dict[str, StockPaperTrader]:
-        """Load traders from saved JSON positions."""
+        """Load traders from saved positions."""
         if self.traders and not force:
             return self.traders
 
@@ -54,7 +53,6 @@ class PortfolioBotManager:
                     symbol=symbol,
                     check_interval=self.check_interval_seconds,
                     positions_db_path=self.positions_db_path,
-                    log_file=f"logs/{symbol.lower()}_bot.log",
                 )
                 trader.setup_strategy(existing_position=position)
                 self.traders[symbol] = trader
@@ -142,7 +140,7 @@ class PortfolioBotManager:
         self.suppress_save_on_stop = False
 
     def save_all_positions(self):
-        """Persist all trader positions to JSON."""
+        """Persist all trader positions to SQLite."""
         for trader in self.traders.values():
             try:
                 trader.save_position_state()

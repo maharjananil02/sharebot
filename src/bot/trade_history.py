@@ -1,28 +1,53 @@
-"""
-Trade history manager - tracks and persists completed trades (sells).
-
-Stores completed trades as JSON files that record each sale transaction.
-"""
+"""Trade history manager - tracks and persists completed trades using SQLite."""
 from __future__ import annotations
 
-import glob
 import json
 import os
+import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional
 
-DEFAULT_LOGS_DIR = "logs"
-TRADE_HISTORY_FILE = os.path.join(DEFAULT_LOGS_DIR, "completed_trades.json")
+DEFAULT_TRADES_DB = os.getenv("TRADES_DB_PATH", "data/trades.db")
 
 
-def ensure_trade_history_file(logs_dir: str = DEFAULT_LOGS_DIR) -> str:
-    """Ensure the trade history file exists."""
-    os.makedirs(logs_dir, exist_ok=True)
-    history_file = os.path.join(logs_dir, "completed_trades.json")
-    if not os.path.exists(history_file):
-        with open(history_file, "w", encoding="utf-8") as f:
-            json.dump({"trades": []}, f, indent=2)
-    return history_file
+def _resolve_db_path(db_path: Optional[str] = None) -> str:
+    """Resolve and initialize trade history database path."""
+    resolved = (db_path or DEFAULT_TRADES_DB).strip()
+    
+    if resolved.endswith((".db", ".sqlite", ".sqlite3")):
+        db_file = resolved
+    else:
+        db_file = os.path.join(resolved, "trades.db")
+    
+    parent_dir = os.path.dirname(db_file)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+    return db_file
+
+
+def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
+    """Get SQLite connection and initialize schema."""
+    db_file = _resolve_db_path(db_path)
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            buy_price REAL NOT NULL,
+            sell_price REAL NOT NULL,
+            pnl REAL NOT NULL,
+            pnl_pct REAL NOT NULL,
+            total_invested REAL NOT NULL,
+            total_proceeds REAL NOT NULL,
+            sold_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    return conn
 
 
 def record_trade(
@@ -33,19 +58,11 @@ def record_trade(
     pnl: float,
     pnl_pct: float,
     sell_timestamp: Optional[str] = None,
-    logs_dir: str = DEFAULT_LOGS_DIR,
+    logs_dir: str = None,
 ) -> Dict:
-    """Record a completed trade (sale) to history."""
+    """Record a completed trade (sale) to SQLite history."""
     if sell_timestamp is None:
         sell_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    history_file = ensure_trade_history_file(logs_dir)
-    
-    try:
-        with open(history_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        data = {"trades": []}
     
     trade_record = {
         "symbol": symbol.upper(),
@@ -59,42 +76,90 @@ def record_trade(
         "sold_at": sell_timestamp,
     }
     
-    data["trades"].append(trade_record)
-    
-    with open(history_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    with _get_connection(logs_dir) as conn:
+        conn.execute(
+            """
+            INSERT INTO trades (
+                symbol, quantity, buy_price, sell_price, pnl, pnl_pct,
+                total_invested, total_proceeds, sold_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                trade_record["symbol"],
+                trade_record["quantity"],
+                trade_record["buy_price"],
+                trade_record["sell_price"],
+                trade_record["pnl"],
+                trade_record["pnl_pct"],
+                trade_record["total_invested"],
+                trade_record["total_proceeds"],
+                trade_record["sold_at"],
+            ),
+        )
+        conn.commit()
     
     return trade_record
 
 
-def get_trade_history(logs_dir: str = DEFAULT_LOGS_DIR) -> List[Dict]:
+def get_trade_history(logs_dir: str = None) -> List[Dict]:
     """Get all completed trades sorted by timestamp (newest first)."""
-    history_file = ensure_trade_history_file(logs_dir)
+    with _get_connection(logs_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM trades ORDER BY sold_at DESC"
+        ).fetchall()
     
-    try:
-        with open(history_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return []
-    
-    trades = data.get("trades", [])
-    # Sort by sold_at timestamp (newest first)
-    return sorted(trades, key=lambda x: x.get("sold_at", ""), reverse=True)
+    trades = []
+    for row in rows:
+        trades.append({
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "quantity": int(row["quantity"]),
+            "buy_price": float(row["buy_price"]),
+            "sell_price": float(row["sell_price"]),
+            "pnl": float(row["pnl"]),
+            "pnl_pct": float(row["pnl_pct"]),
+            "total_invested": float(row["total_invested"]),
+            "total_proceeds": float(row["total_proceeds"]),
+            "sold_at": row["sold_at"],
+        })
+    return trades
 
 
-def get_trades_by_symbol(symbol: str, logs_dir: str = DEFAULT_LOGS_DIR) -> List[Dict]:
+def get_trades_by_symbol(symbol: str, logs_dir: str = None) -> List[Dict]:
     """Get all completed trades for a specific symbol."""
-    all_trades = get_trade_history(logs_dir)
-    return [t for t in all_trades if t.get("symbol") == symbol.upper()]
+    with _get_connection(logs_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM trades WHERE symbol = ? ORDER BY sold_at DESC",
+            (symbol.upper(),),
+        ).fetchall()
+    
+    trades = []
+    for row in rows:
+        trades.append({
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "quantity": int(row["quantity"]),
+            "buy_price": float(row["buy_price"]),
+            "sell_price": float(row["sell_price"]),
+            "pnl": float(row["pnl"]),
+            "pnl_pct": float(row["pnl_pct"]),
+            "total_invested": float(row["total_invested"]),
+            "total_proceeds": float(row["total_proceeds"]),
+            "sold_at": row["sold_at"],
+        })
+    return trades
 
 
-def get_trade_statistics(logs_dir: str = DEFAULT_LOGS_DIR) -> Dict:
+def get_trade_statistics(logs_dir: str = None) -> Dict:
     """Get overall trade statistics."""
     trades = get_trade_history(logs_dir)
     
     if not trades:
         return {
             "total_trades": 0,
+            "profitable_trades": 0,
+            "losing_trades": 0,
             "total_profit": 0.0,
             "total_loss": 0.0,
             "total_pnl": 0.0,
@@ -123,12 +188,44 @@ def get_trade_statistics(logs_dir: str = DEFAULT_LOGS_DIR) -> Dict:
     }
 
 
-def clear_trade_history(logs_dir: str = DEFAULT_LOGS_DIR) -> bool:
+def clear_trade_history(logs_dir: str = None) -> bool:
     """Clear all trade history."""
-    history_file = ensure_trade_history_file(logs_dir)
     try:
-        with open(history_file, "w", encoding="utf-8") as f:
-            json.dump({"trades": []}, f, indent=2)
+        with _get_connection(logs_dir) as conn:
+            conn.execute("DELETE FROM trades")
+            conn.commit()
         return True
-    except OSError:
+    except Exception:
         return False
+
+
+def migrate_legacy_trades(source_json_path: str = "logs/completed_trades.json", target_db: str = None) -> int:
+    """Migrate trades from legacy JSON file to SQLite."""
+    if not os.path.exists(source_json_path):
+        return 0
+    
+    migrated_count = 0
+    try:
+        with open(source_json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return 0
+    
+    trades = data.get("trades", [])
+    for trade in trades:
+        try:
+            record_trade(
+                symbol=trade.get("symbol", ""),
+                quantity=int(trade.get("quantity", 0)),
+                buy_price=float(trade.get("buy_price", 0)),
+                sell_price=float(trade.get("sell_price", 0)),
+                pnl=float(trade.get("pnl", 0)),
+                pnl_pct=float(trade.get("pnl_pct", 0)),
+                sell_timestamp=trade.get("sold_at"),
+                logs_dir=target_db,
+            )
+            migrated_count += 1
+        except Exception:
+            continue
+    
+    return migrated_count

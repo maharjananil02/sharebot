@@ -27,7 +27,7 @@ class NepalFormatter(logging.Formatter):
         return dt.isoformat()
 
 
-def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
+def setup_logger(name, log_level="INFO", log_file=None, add_console=True, enable_file=False):
     """Setup a logger with optional file and console handlers.
 
     The logger is configured only once per name to avoid duplicate handlers.
@@ -40,7 +40,8 @@ def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
     logger.propagate = False
 
     logs_dir = "logs"
-    os.makedirs(logs_dir, exist_ok=True)
+    if enable_file:
+        os.makedirs(logs_dir, exist_ok=True)
 
     fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S %Z"
@@ -52,13 +53,14 @@ def setup_logger(name, log_level="INFO", log_file=None, add_console=True):
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-    if log_file is None:
-        log_file = os.path.join(logs_dir, f"bot_{_now_nepal().strftime('%Y%m%d')}.log")
+    if enable_file:
+        if log_file is None:
+            log_file = os.path.join(logs_dir, f"bot_{_now_nepal().strftime('%Y%m%d')}.log")
 
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(log_level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
     logger._bot_logger_configured = True
     return logger

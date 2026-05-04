@@ -1,19 +1,23 @@
-"""Simple file-based position storage using JSON files.
+"""SQLite-backed position storage.
 
-This module stores positions as JSON files in a directory (default `logs/`).
-Functions accept an optional `positions_dir` parameter for compatibility with
-existing call sites.
+This module stores positions in a SQLite database. The legacy ``positions_dir``
+parameter name is kept for backward compatibility with existing call sites.
 """
 from __future__ import annotations
 
 import glob
 import json
 import os
+import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional
 
 
-DEFAULT_POSITIONS_DIR = os.getenv("POSITIONS_DIR", "logs")
+DEFAULT_POSITIONS_TARGET = (
+    os.getenv("POSITIONS_DB_PATH")
+    or os.getenv("POSITIONS_DIR")
+    or "data/positions.db"
+)
 
 
 def _normalize_symbol(symbol: str) -> str:
@@ -22,15 +26,51 @@ def _normalize_symbol(symbol: str) -> str:
     return symbol.strip().upper()
 
 
-def _ensure_dir(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
+def _resolve_db_path(target: Optional[str]) -> str:
+    resolved = (target or DEFAULT_POSITIONS_TARGET).strip()
+
+    if resolved.startswith("sqlite:///"):
+        db_path = resolved[len("sqlite:///"):]
+    else:
+        looks_like_file = resolved.endswith((".db", ".sqlite", ".sqlite3"))
+        if looks_like_file:
+            db_path = resolved
+        else:
+            db_path = os.path.join(resolved, "positions.db")
+
+    parent_dir = os.path.dirname(db_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+    return db_path
+
+
+def _get_connection(target: Optional[str] = None) -> sqlite3.Connection:
+    db_path = _resolve_db_path(target)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS positions (
+            symbol TEXT PRIMARY KEY,
+            shares INTEGER NOT NULL,
+            avg_cost REAL NOT NULL,
+            total_invested REAL NOT NULL,
+            cash REAL NOT NULL,
+            current_price REAL NOT NULL,
+            entry_price REAL NOT NULL,
+            saved_at TEXT NOT NULL,
+            extra_json TEXT
+        )
+        """
+    )
+    conn.commit()
+    return conn
 
 
 def get_position_file_path(symbol: str, positions_dir: Optional[str] = None) -> str:
     symbol = _normalize_symbol(symbol)
-    dirpath = positions_dir or DEFAULT_POSITIONS_DIR
-    _ensure_dir(dirpath)
-    return os.path.join(dirpath, f"{symbol.lower()}_position.json")
+    db_path = _resolve_db_path(positions_dir)
+    return f"sqlite:///{db_path}#symbol={symbol}"
 
 
 def build_position_record(
@@ -71,70 +111,166 @@ def build_position_record(
 
 def save_position(position: Dict, positions_dir: Optional[str] = None) -> str:
     symbol = _normalize_symbol(position.get("symbol"))
-    position_to_save = dict(position)
-    position_to_save["symbol"] = symbol
-    position_to_save.setdefault("saved_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    dirpath = positions_dir or DEFAULT_POSITIONS_DIR
-    _ensure_dir(dirpath)
-    path = get_position_file_path(symbol, positions_dir=dirpath)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(position_to_save, f, ensure_ascii=False, indent=2)
-    return path
+    saved_at = position.get("saved_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    base_fields = {
+        "symbol",
+        "shares",
+        "avg_cost",
+        "total_invested",
+        "cash",
+        "current_price",
+        "entry_price",
+        "saved_at",
+    }
+    extra_fields = {k: v for k, v in dict(position).items() if k not in base_fields}
+
+    with _get_connection(positions_dir) as conn:
+        conn.execute(
+            """
+            INSERT INTO positions (
+                symbol, shares, avg_cost, total_invested, cash,
+                current_price, entry_price, saved_at, extra_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(symbol) DO UPDATE SET
+                shares=excluded.shares,
+                avg_cost=excluded.avg_cost,
+                total_invested=excluded.total_invested,
+                cash=excluded.cash,
+                current_price=excluded.current_price,
+                entry_price=excluded.entry_price,
+                saved_at=excluded.saved_at,
+                extra_json=excluded.extra_json
+            """,
+            (
+                symbol,
+                int(position.get("shares", 0) or 0),
+                float(position.get("avg_cost", 0.0) or 0.0),
+                float(position.get("total_invested", 0.0) or 0.0),
+                float(position.get("cash", 0.0) or 0.0),
+                float(position.get("current_price", position.get("avg_cost", 0.0)) or 0.0),
+                float(position.get("entry_price", position.get("avg_cost", 0.0)) or 0.0),
+                str(saved_at),
+                json.dumps(extra_fields, ensure_ascii=False) if extra_fields else None,
+            ),
+        )
+        conn.commit()
+
+    return _resolve_db_path(positions_dir)
 
 
 def load_position(symbol: str, positions_dir: Optional[str] = None) -> Optional[Dict]:
     symbol = _normalize_symbol(symbol)
-    path = get_position_file_path(symbol, positions_dir=positions_dir)
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
+    with _get_connection(positions_dir) as conn:
+        row = conn.execute("SELECT * FROM positions WHERE symbol = ?", (symbol,)).fetchone()
+    if not row:
         return None
-    if not data.get("symbol"):
-        return None
-    data["file_path"] = path
+
+    data = {
+        "symbol": row["symbol"],
+        "shares": int(row["shares"]),
+        "avg_cost": float(row["avg_cost"]),
+        "total_invested": float(row["total_invested"]),
+        "cash": float(row["cash"]),
+        "current_price": float(row["current_price"]),
+        "entry_price": float(row["entry_price"]),
+        "saved_at": row["saved_at"],
+        "file_path": get_position_file_path(symbol, positions_dir=positions_dir),
+    }
+
+    if row["extra_json"]:
+        try:
+            data.update(json.loads(row["extra_json"]))
+        except Exception:
+            pass
+
     return data
 
 
 def list_positions(positions_dir: Optional[str] = None) -> List[Dict]:
-    dirpath = positions_dir or DEFAULT_POSITIONS_DIR
-    _ensure_dir(dirpath)
     positions: List[Dict] = []
-    pattern = os.path.join(dirpath, "*_position.json")
-    for path in glob.glob(pattern):
+    with _get_connection(positions_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM positions WHERE shares > 0 ORDER BY symbol ASC"
+        ).fetchall()
+
+    for row in rows:
+        record = {
+            "symbol": row["symbol"],
+            "shares": int(row["shares"]),
+            "avg_cost": float(row["avg_cost"]),
+            "total_invested": float(row["total_invested"]),
+            "cash": float(row["cash"]),
+            "current_price": float(row["current_price"]),
+            "entry_price": float(row["entry_price"]),
+            "saved_at": row["saved_at"],
+            "file_path": get_position_file_path(row["symbol"], positions_dir=positions_dir),
+        }
+        if row["extra_json"]:
+            try:
+                record.update(json.loads(row["extra_json"]))
+            except Exception:
+                pass
+        positions.append(record)
+
+    return positions
+
+
+def _legacy_position_files(source_dirs: List[str]) -> List[str]:
+    files: List[str] = []
+    for source_dir in source_dirs:
+        if not source_dir:
+            continue
+        pattern = os.path.join(source_dir, "*_position.json")
+        files.extend(glob.glob(pattern))
+    return files
+
+
+def _load_legacy_json(path: str) -> Optional[Dict]:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception:
+        return None
+    if not isinstance(data, dict) or not data.get("symbol"):
+        return None
+    return data
+
+
+def migrate_positions(source_dirs: Optional[List[str]] = None, target_dir: Optional[str] = None) -> List[str]:
+    """Migrate legacy JSON position files into SQLite.
+
+    Args:
+        source_dirs: Directories that may contain ``*_position.json`` files.
+        target_dir: SQLite target (db file path or directory).
+
+    Returns:
+        List of migrated symbols.
+    """
+    candidates = source_dirs or ["logs", "data/positions"]
+    migrated_symbols: List[str] = []
+
+    for json_file in _legacy_position_files(candidates):
+        legacy = _load_legacy_json(json_file)
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            shares = int(data.get("shares", 0) or 0)
-            if data.get("symbol") and shares > 0:
-                data["file_path"] = path
-                positions.append(data)
+            if not legacy:
+                continue
+            shares = int(legacy.get("shares", 0) or 0)
+            if shares <= 0:
+                continue
+            symbol = _normalize_symbol(str(legacy.get("symbol", "")))
+            save_position(legacy, positions_dir=target_dir)
+            migrated_symbols.append(symbol)
         except Exception:
             continue
-    return positions
+
+    return sorted(set(migrated_symbols))
 
 
 def delete_position(symbol: str, positions_dir: Optional[str] = None) -> bool:
     symbol = _normalize_symbol(symbol)
-    path = get_position_file_path(symbol, positions_dir=positions_dir)
-    removed = False
-    if os.path.exists(path):
-        try:
-            os.remove(path)
-            removed = True
-        except OSError:
-            removed = False
-    # remove bot log as well
-    log_path = os.path.join("logs", f"{symbol.lower()}_bot.log")
-    if os.path.exists(log_path):
-        try:
-            os.remove(log_path)
-            removed = True
-        except OSError:
-            pass
-    return removed
-
-
-def migrate_positions(source_dirs: Optional[List[str]] = None, target_dir: Optional[str] = None) -> List[str]:
-    # No-op for now; keep for compat but do not move files between stores
-    return []
+    with _get_connection(positions_dir) as conn:
+        cursor = conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+        conn.commit()
+        return cursor.rowcount > 0

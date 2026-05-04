@@ -1,9 +1,9 @@
 import tempfile
 import unittest
-import json
 from unittest.mock import MagicMock, patch
 
 from src.bot.stock_trader import StockPaperTrader
+from src.bot.position_store import load_position
 
 
 class FakeStrategy:
@@ -34,16 +34,17 @@ class FakeStrategy:
 class StockTraderTests(unittest.TestCase):
     def test_save_position_state_includes_stop_loss(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            trader = StockPaperTrader(symbol="AHL", check_interval=30, log_file=f"{tmpdir}/ahl.log")
-            trader.position_state_file = f"{tmpdir}/ahl_position.json"
+            db_path = f"{tmpdir}/positions.db"
+            trader = StockPaperTrader(symbol="AHL", check_interval=30, positions_db_path=db_path)
+            trader.position_state_file = db_path
             trader.paper_trader.seed_position("AHL", 10, 100)
             trader.current_price = 120
             trader.strategy = FakeStrategy(entry_price=100, stop_loss=90, total_quantity=10)
 
             trader.save_position_state()
 
-            with open(trader.position_state_file, "r", encoding="utf-8") as fh:
-                content = json.load(fh)
+            content = load_position("AHL", positions_dir=db_path)
+            self.assertIsNotNone(content)
 
             self.assertEqual(content["stop_loss"], 90)
 

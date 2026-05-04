@@ -5,7 +5,7 @@ Features:
 - Weekly buy suggestion button
 - Editable bought price and quantity for suggested shares
 - Save positions in a database for persistence
-- Start/stop an auto bot that resumes from saved JSON entries
+- Start/stop an auto bot that resumes from saved positions
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from src.bot.market_analyzer import MarketAnalyzer
 from src.bot.market_history import WeeklyMarketHistory
 from src.bot.portfolio_bot import PortfolioBotManager
 from src.bot.position_store import build_position_record, list_positions, load_position, save_position, delete_position, migrate_positions
-from src.bot.trade_history import get_trade_history, get_trade_statistics, get_trades_by_symbol
+from src.bot.trade_history import get_trade_history, get_trade_statistics, get_trades_by_symbol, migrate_legacy_trades
 from src.bot.notification import send_email_notification
 
 
@@ -45,20 +45,6 @@ def is_market_open() -> bool:
     open_hour = load_env_int("MARKET_OPEN_HOUR", 9)
     close_hour = load_env_int("MARKET_CLOSE_HOUR", 15)
     return open_hour <= hour < close_hour
-
-
-def read_log_file(symbol: str, logs_dir: str = "logs") -> str:
-    """Read the log file for a given symbol"""
-    log_file = os.path.join(logs_dir, f"{symbol.lower()}_bot.log")
-    if not os.path.exists(log_file):
-        return f"No log file found for {symbol}"
-    
-    try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            content = f.read()
-        return content if content else f"Log file is empty for {symbol}"
-    except Exception as e:
-        return f"Error reading log file: {str(e)}"
 
 
 def load_env_value(key: str, default: str = "") -> str:
@@ -95,29 +81,23 @@ def load_env_int(key: str, default: int) -> int:
 
 
 def get_positions_db_path() -> str:
-    """Return the configured positions directory (legacy file-based storage)."""
-    return load_env_value("POSITIONS_DIR", "logs")
+    """Return configured SQLite path for saved positions."""
+    return load_env_value("POSITIONS_DB_PATH", load_env_value("POSITIONS_DIR", "data/positions.db"))
 
 
 def ensure_positions_migrated() -> None:
-    """Copy legacy JSON positions into the configured database on first run."""
-    migrate_positions(source_dirs=["logs", load_env_value("POSITIONS_DIR", "data/positions")], target_dir=get_positions_db_path())
+    """Migrate legacy JSON position files into the configured SQLite database."""
+    migrate_positions(source_dirs=["logs", "data/positions"], target_dir=get_positions_db_path())
 
 
 def check_storage_health() -> None:
     """Display which storage target is active and whether it can be queried."""
     try:
-        from src.bot import position_store as ps
-
         target = get_positions_db_path()
-        is_postgres = ps._is_postgres_target(target)
         try:
-            positions = ps.list_positions(target)
+            positions = list_positions(target)
             count = len(positions)
-            if is_postgres:
-                st.sidebar.success(f"Storage: Postgres ({target.split('@')[-1]}) — {count} positions")
-            else:
-                st.sidebar.success(f"Storage: SQLite ({target}) — {count} positions")
+            st.sidebar.success(f"Storage: SQLite ({target}) — {count} positions")
         except Exception as e:
             st.sidebar.error(f"Storage connection error: {str(e)}")
     except Exception:
@@ -169,7 +149,7 @@ st.set_page_config(
 )
 
 st.title("NEPSE Weekly Buy Bot")
-st.caption("Suggest weekly purchases, save bought price and quantity, and run an auto bot from JSON positions.")
+st.caption("Suggest weekly purchases, save bought price and quantity, and run an auto bot from SQLite-saved positions.")
 
 # -----------------------------------------------------------------------------
 # Session state
@@ -217,9 +197,10 @@ bot_interval_seconds = st.sidebar.number_input(
     step=30,
 )
 
-st.sidebar.info("The bot uses the saved JSON entry price and quantity, just like the GUFL position file.")
+st.sidebar.info("The bot uses saved entry price and quantity from the SQLite positions database.")
 
 ensure_positions_migrated()
+migrate_legacy_trades()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Email Alerts")
@@ -310,7 +291,7 @@ def build_suggestion_dataframe(suggestions):
 def refresh_positions_df():
     positions = list_positions(get_positions_db_path())
     if not positions:
-        return pd.DataFrame(columns=["symbol", "shares", "avg_cost", "total_invested", "cash", "current_price", "entry_price", "saved_at"])
+        return pd.DataFrame(columns=["symbol", "shares", "avg_cost", "total_invested", "cash", "current_price", "entry_price", "stop_loss", "saved_at"])
 
     rows = []
     for pos in positions:
@@ -323,6 +304,7 @@ def refresh_positions_df():
                 "cash": pos.get("cash"),
                 "current_price": pos.get("current_price"),
                 "entry_price": pos.get("entry_price"),
+                "stop_loss": pos.get("stop_loss"),
                 "saved_at": pos.get("saved_at"),
                 "file_path": pos.get("file_path"),
             }
@@ -487,7 +469,7 @@ with tab_suggest:
                 saved_files.append(saved_path)
 
             if saved_files:
-                st.success(f"Saved {len(saved_files)} position file(s):")
+                st.success(f"Saved {len(saved_files)} position(s) in SQLite:")
                 for path in saved_files:
                     st.write(path)
             else:
@@ -585,7 +567,7 @@ with tab_positions:
         if preview:
             st.markdown(f"**{selected_symbol} Position**")
 
-            col_e1, col_e2, col_e3 = st.columns(3)
+            col_e1, col_e2, col_e3, col_e4 = st.columns(4)
             with col_e1:
                 edit_shares = st.number_input(
                     "Shares",
@@ -609,6 +591,14 @@ with tab_positions:
                     value=float(preview.get("current_price", 100)),
                     step=0.05,
                     key=f"edit_current_{selected_symbol}",
+                )
+            with col_e4:
+                edit_stop_loss = st.number_input(
+                    "Stop Loss (Rs.)",
+                    min_value=0.01,
+                    value=float(preview.get("stop_loss", preview.get("avg_cost", 100) * 0.9)),
+                    step=0.05,
+                    key=f"edit_stop_loss_{selected_symbol}",
                 )
 
             btn_col1, btn_col2 = st.columns(2)
@@ -635,6 +625,7 @@ with tab_positions:
                     cash=float(preview.get("cash", 1000000)),
                     current_price=float(edit_current),
                     entry_price=float(edit_price),
+                    stop_loss=float(edit_stop_loss),
                 )
                 save_position(updated_position, positions_dir=get_positions_db_path())
 
@@ -662,16 +653,11 @@ with tab_positions:
                 st.rerun()
 
             st.json(preview)
-            
-            st.divider()
-            st.markdown("### Trading Log")
-            log_content = read_log_file(selected_symbol)
-            st.code(log_content, language="log")
 
 with tab_bot:
     st.subheader("Auto bot")
     st.write(
-        "The auto bot loads the saved JSON positions, uses the stored bought price as the entry reference, "
+        "The auto bot loads saved positions from SQLite, uses the stored bought price as the entry reference, "
         "and monitors price changes similar to the GUFL bot."
     )
 
@@ -727,9 +713,9 @@ with tab_bot:
 
     st.markdown("### Notes")
     st.markdown(
-        "- Each saved symbol is stored as a JSON file in the logs folder.\n"
+        "- Each saved symbol is persisted in the SQLite positions database.\n"
         "- The saved `avg_cost` is treated as the initial reference price.\n"
-        "- The bot reads that JSON file when resuming the position.\n"
+        "- The bot reads this saved position record when resuming the position.\n"
         "- Weekly suggestions use up to 7 saved market snapshots for better selection."
     )
 
@@ -823,12 +809,6 @@ with tab_history:
                         pnl_color = "green" if selected_trade['pnl'] >= 0 else "red"
                         st.metric("P&L", f"Rs. {selected_trade['pnl']:,.2f}", 
                                  delta=f"{selected_trade['pnl_pct']:+.2f}%")
-                    
-                    # Display logs
-                    st.divider()
-                    st.markdown(f"### Full Trading Log for {selected_sym}")
-                    log_content = read_log_file(selected_sym)
-                    st.code(log_content, language="log")
                 
                 # Calculate symbol statistics
                 sym_stats = {

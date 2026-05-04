@@ -34,17 +34,17 @@ class StockPaperTrader:
         Args:
             symbol: Stock symbol (e.g., "NABIL", "GUFL") - default NABIL
             check_interval: Check price every N seconds (default 900 = 15 minutes)
-            log_file: Log file path (default logs/{symbol}.log)
-            positions_db_path: directory used to persist position JSON files (default from POSITIONS_DIR or 'logs')
+            log_file: Deprecated and ignored (kept for backward compatibility)
+            positions_db_path: SQLite db path (or directory) for persisted positions
         """
         self.symbol = symbol.upper()
         self.check_interval = check_interval
-        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DIR", "logs")
-        self.log_file = log_file or f"logs/{self.symbol.lower()}.log"
+        self.positions_db_path = positions_db_path or os.getenv("POSITIONS_DB_PATH") or os.getenv("POSITIONS_DIR", "data/positions.db")
+        self.log_file = log_file
         self.position_state_file = self.positions_db_path
         
         # Create logger
-        self.logger = setup_logger(f"{__name__}.{self.symbol}", log_file=self.log_file)
+        self.logger = setup_logger(f"{__name__}.{self.symbol}")
         
         # Paper trader
         self.paper_trader = PaperTrader(logger=self.logger)
@@ -69,7 +69,6 @@ class StockPaperTrader:
 
         self.logger.info("\n" + "="*90)
         self.logger.info(f"{self.symbol} PAPER TRADING STARTED")
-        self.logger.info(f"Log File: {self.log_file}")
         self.logger.info(f"Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         self.logger.info(f"Check Interval: {self.check_interval} seconds")
         self.logger.info("="*90 + "\n")
@@ -205,7 +204,7 @@ class StockPaperTrader:
         }
 
         saved_path = save_position(state, positions_dir=self.positions_db_path)
-        self.logger.info(f"Saved open position to file {saved_path}")
+        self.logger.info(f"Saved open position to SQLite database {saved_path}")
 
     def _has_open_position(self) -> bool:
         """Return True if the trader still holds shares for this symbol."""
