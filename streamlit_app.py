@@ -20,8 +20,14 @@ from src.bot.market_analyzer import MarketAnalyzer
 from src.bot.market_history import WeeklyMarketHistory
 from src.bot.portfolio_bot import PortfolioBotManager
 from src.bot.position_store import build_position_record, list_positions, load_position, save_position, delete_position, migrate_positions
-from src.bot.trade_history import get_trade_history, get_trade_statistics, get_trades_by_symbol, migrate_legacy_trades
+from src.bot.trade_history import get_trade_history, get_trade_statistics, get_trades_by_symbol
 from src.bot.notification import send_email_notification
+
+# Try to import legacy trade migration (available in newer versions)
+try:
+    from src.bot.trade_history import migrate_legacy_trades
+except ImportError:
+    migrate_legacy_trades = None
 
 
 ENV_FILE = ".env"
@@ -200,7 +206,8 @@ bot_interval_seconds = st.sidebar.number_input(
 st.sidebar.info("The bot uses saved entry price and quantity from the SQLite positions database.")
 
 ensure_positions_migrated()
-migrate_legacy_trades()
+if migrate_legacy_trades:
+    migrate_legacy_trades()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Email Alerts")
