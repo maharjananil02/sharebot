@@ -6,3 +6,4 @@ pandas>=2.2.3
 schedule==1.2.0
 streamlit>=1.44.0
 psycopg2-binary>=2.9.9
+Flask>=2.2
