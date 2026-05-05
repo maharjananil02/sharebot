@@ -112,13 +112,26 @@ def check_storage_health() -> None:
         target = get_positions_db_path()
         db_abs_path = os.path.abspath(target)
         db_exists = os.path.exists(db_abs_path)
+        db_size = os.path.getsize(db_abs_path) if db_exists else 0
+        
+        # Show path and file info
+        st.sidebar.write("### Database Info")
+        st.sidebar.code(f"Path: {db_abs_path}\nExists: {db_exists}\nSize: {db_size} bytes", language="text")
+        
         try:
             positions = list_positions(target)
             count = len(positions)
-            status_text = f"✅ SQLite ({db_abs_path}) — {count} positions"
+            status_text = f"✅ SQLite — {count} positions loaded"
             st.sidebar.success(status_text)
+            
+            # Show position symbols
+            if count > 0:
+                syms = ", ".join([p.get("symbol", "?") for p in positions[:5]])
+                if count > 5:
+                    syms += f", ... (+{count - 5} more)"
+                st.sidebar.info(f"Symbols: {syms}")
         except Exception as e:
-            st.sidebar.warning(f"⚠️ Cannot read positions from {db_abs_path}: {str(e)}")
+            st.sidebar.warning(f"⚠️ Cannot read positions: {str(e)}")
     except Exception as e:
         st.sidebar.error(f"❌ Storage check failed: {str(e)}")
 

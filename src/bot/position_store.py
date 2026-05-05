@@ -41,6 +41,12 @@ def _resolve_db_path(target: Optional[str]) -> str:
     parent_dir = os.path.dirname(db_path)
     if parent_dir:
         os.makedirs(parent_dir, exist_ok=True)
+    
+    # Debug logging
+    abs_path = os.path.abspath(db_path)
+    exists = os.path.exists(abs_path)
+    print(f"[POSITION_STORE] DB Path: {abs_path} | Exists: {exists}")
+    
     return db_path
 
 
