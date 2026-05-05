@@ -55,7 +55,11 @@ htmlcov/
 
 # Project specific
 screenshots/
-# Database WAL/SHM files (but keep .db files)
+
+# Database files (SQLite)
+*.db
+data/*.db
+data/**/*.db
 data/*.db-shm
 data/**/*.db-shm
 data/*.db-wal
