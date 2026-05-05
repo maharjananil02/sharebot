@@ -53,17 +53,17 @@ def is_market_open() -> bool:
     if weekday >= 5:  # Saturday or Sunday
         return False
     
-    # Morning session: 9:00 – 12:30
-    market_open_hour = load_env_int("MARKET_OPEN_HOUR", 9)
+    # Morning session: 11:00 – 15:00 (3 PM)
+    market_open_hour = load_env_int("MARKET_OPEN_HOUR", 11)
     market_open_min = load_env_int("MARKET_OPEN_MIN", 0)
-    market_break_hour = load_env_int("MARKET_BREAK_HOUR", 12)
-    market_break_min = load_env_int("MARKET_BREAK_MIN", 30)
+    market_break_hour = load_env_int("MARKET_BREAK_HOUR", 15)
+    market_break_min = load_env_int("MARKET_BREAK_MIN", 0)
     
-    # Afternoon session: 13:30 – 15:30
-    market_afternoon_hour = load_env_int("MARKET_AFTERNOON_OPEN_HOUR", 13)
-    market_afternoon_min = load_env_int("MARKET_AFTERNOON_OPEN_MIN", 30)
+    # Afternoon session: disabled by default (set to close time)
+    market_afternoon_hour = load_env_int("MARKET_AFTERNOON_OPEN_HOUR", 15)
+    market_afternoon_min = load_env_int("MARKET_AFTERNOON_OPEN_MIN", 0)
     market_close_hour = load_env_int("MARKET_CLOSE_HOUR", 15)
-    market_close_min = load_env_int("MARKET_CLOSE_MIN", 30)
+    market_close_min = load_env_int("MARKET_CLOSE_MIN", 0)
     
     current_time = hour * 60 + minute  # Convert to minutes for easy comparison
     morning_open = market_open_hour * 60 + market_open_min
