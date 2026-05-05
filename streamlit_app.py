@@ -214,7 +214,10 @@ bot_interval_seconds = st.sidebar.number_input(
 
 st.sidebar.info("The bot uses saved entry price and quantity from the SQLite positions database.")
 
-ensure_positions_migrated()
+# Migration from legacy JSON files is run only once during initial deployment.
+# Commented out to prevent legacy positions from being re-imported on every restart.
+# Uncomment if you need to re-run the migration: ensure_positions_migrated()
+
 if migrate_legacy_trades:
     migrate_legacy_trades()
 
