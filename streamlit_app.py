@@ -107,17 +107,20 @@ def ensure_positions_migrated() -> None:
 
 def check_storage_health() -> None:
     """Display which storage target is active and whether it can be queried."""
+    import os
     try:
         target = get_positions_db_path()
+        db_abs_path = os.path.abspath(target)
+        db_exists = os.path.exists(db_abs_path)
         try:
             positions = list_positions(target)
             count = len(positions)
-            st.sidebar.success(f"Storage: SQLite ({target}) — {count} positions")
+            status_text = f"✅ SQLite ({db_abs_path}) — {count} positions"
+            st.sidebar.success(status_text)
         except Exception as e:
-            st.sidebar.error(f"Storage connection error: {str(e)}")
-    except Exception:
-        # Fail silently if position_store import isn't available for some reason
-        pass
+            st.sidebar.warning(f"⚠️ Cannot read positions from {db_abs_path}: {str(e)}")
+    except Exception as e:
+        st.sidebar.error(f"❌ Storage check failed: {str(e)}")
 
 
 def save_env_values(values: dict[str, str], env_file: str = ENV_FILE) -> None:
@@ -213,6 +216,9 @@ bot_interval_seconds = st.sidebar.number_input(
 )
 
 st.sidebar.info("The bot uses saved entry price and quantity from the SQLite positions database.")
+
+# Display storage health and location
+check_storage_health()
 
 # Migration from legacy JSON files is run only once during initial deployment.
 # Commented out to prevent legacy positions from being re-imported on every restart.
