@@ -187,6 +187,43 @@ def load_position(symbol: str, positions_dir: Optional[str] = None) -> Optional[
 
     if row["extra_json"]:
         try:
+            def _resolve_db_path(db_path_env_var='POSITIONS_DB_PATH'):
+                """Resolve database path, creating parent directory if needed.
+    
+                Supports:
+                - Tilde expansion (~/.streamlit/positions.db)
+                - Absolute paths (/full/path/to/positions.db)
+                - Relative paths (./data/positions.db)
+                """
+                db_path = os.getenv(db_path_env_var, './data/positions.db')
+    
+                # Expand tilde to home directory
+                db_path = os.path.expanduser(db_path)
+    
+                # Convert to absolute path
+                abs_path = os.path.abspath(db_path)
+                parent_dir = os.path.dirname(abs_path)
+    
+                if not os.path.exists(parent_dir):
+                    try:
+                        os.makedirs(parent_dir, exist_ok=True)
+                        print(f"[POSITION_STORE] Created directory: {parent_dir}")
+                    except PermissionError as e:
+                        print(f"[POSITION_STORE] ⚠️ Permission denied creating {parent_dir}: {e}")
+                        print(f"[POSITION_STORE] Trying fallback path...")
+                        # Fallback to ./data/ if primary path fails
+                        fallback_path = os.path.expanduser('./data/positions.db')
+                        fallback_abs = os.path.abspath(fallback_path)
+                        fallback_parent = os.path.dirname(fallback_abs)
+                        os.makedirs(fallback_parent, exist_ok=True)
+                        abs_path = fallback_abs
+                        parent_dir = fallback_parent
+                        print(f"[POSITION_STORE] Using fallback: {abs_path}")
+    
+                exists = os.path.exists(abs_path)
+                size_bytes = os.path.getsize(abs_path) if exists else 0
+                print(f"[POSITION_STORE] ✅ DB: {abs_path} | Exists: {exists} | Size: {size_bytes} bytes")
+                return abs_path
             data.update(json.loads(row["extra_json"]))
         except Exception:
             pass

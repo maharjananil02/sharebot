@@ -48,6 +48,35 @@ def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     )
     conn.commit()
     return conn
+def _get_connection(db_path_env_var='TRADES_DB_PATH'):
+    """Get database connection.
+    
+    Supports tilde expansion and fallback to ./data/ if primary path fails.
+    """
+    db_path = os.getenv(db_path_env_var, './data/trades.db')
+    
+    # Expand tilde to home directory
+    db_path = os.path.expanduser(db_path)
+    
+    # Convert to absolute path
+    abs_path = os.path.abspath(db_path)
+    parent_dir = os.path.dirname(abs_path)
+    
+    if not os.path.exists(parent_dir):
+        try:
+            os.makedirs(parent_dir, exist_ok=True)
+        except PermissionError as e:
+            print(f"[TRADE_HISTORY] ⚠️ Permission denied creating {parent_dir}: {e}")
+            # Fallback to ./data/
+            fallback_path = os.path.expanduser('./data/trades.db')
+            fallback_abs = os.path.abspath(fallback_path)
+            fallback_parent = os.path.dirname(fallback_abs)
+            os.makedirs(fallback_parent, exist_ok=True)
+            abs_path = fallback_abs
+    
+    conn = sqlite3.connect(abs_path)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def record_trade(
