@@ -34,11 +34,7 @@ ENV_FILE = ".env"
 
 
 def is_market_open() -> bool:
-    """Check if NEPSE is open based on Nepal time (Monday to Friday, two sessions).
-    
-    Morning session: 9:00 – 12:30 (configurable via MARKET_OPEN_HOUR, MARKET_OPEN_MIN, MARKET_BREAK_HOUR, MARKET_BREAK_MIN)
-    Afternoon session: 13:30 – 15:30 (configurable via MARKET_AFTERNOON_OPEN, MARKET_CLOSE_HOUR, MARKET_CLOSE_MIN)
-    """
+    """Check if NEPSE is open based on Nepal time (Monday to Friday, 11 AM - 3 PM continuous)."""
     timezone_name = load_env_value("MARKET_TIMEZONE", "Asia/Kathmandu")
     try:
         now = datetime.now(ZoneInfo(timezone_name))
@@ -53,29 +49,17 @@ def is_market_open() -> bool:
     if weekday >= 5:  # Saturday or Sunday
         return False
     
-    # Morning session: 11:00 – 15:00 (3 PM)
+    # Single session: 11:00 AM – 3:00 PM (no breaks)
     market_open_hour = load_env_int("MARKET_OPEN_HOUR", 11)
     market_open_min = load_env_int("MARKET_OPEN_MIN", 0)
-    market_break_hour = load_env_int("MARKET_BREAK_HOUR", 15)
-    market_break_min = load_env_int("MARKET_BREAK_MIN", 0)
-    
-    # Afternoon session: disabled by default (set to close time)
-    market_afternoon_hour = load_env_int("MARKET_AFTERNOON_OPEN_HOUR", 15)
-    market_afternoon_min = load_env_int("MARKET_AFTERNOON_OPEN_MIN", 0)
     market_close_hour = load_env_int("MARKET_CLOSE_HOUR", 15)
     market_close_min = load_env_int("MARKET_CLOSE_MIN", 0)
     
     current_time = hour * 60 + minute  # Convert to minutes for easy comparison
-    morning_open = market_open_hour * 60 + market_open_min
-    morning_close = market_break_hour * 60 + market_break_min
-    afternoon_open = market_afternoon_hour * 60 + market_afternoon_min
-    afternoon_close = market_close_hour * 60 + market_close_min
+    market_open = market_open_hour * 60 + market_open_min
+    market_close = market_close_hour * 60 + market_close_min
     
-    # Check if in morning or afternoon session
-    in_morning = morning_open <= current_time < morning_close
-    in_afternoon = afternoon_open <= current_time < afternoon_close
-    
-    return in_morning or in_afternoon
+    return market_open <= current_time < market_close
 
 
 def load_env_value(key: str, default: str = "") -> str:
