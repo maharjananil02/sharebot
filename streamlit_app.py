@@ -332,6 +332,7 @@ def start_auto_bot(manager: PortfolioBotManager, force_reload: bool = True) -> b
     return True
 
 
+
 def stop_auto_bot(manager: PortfolioBotManager, suppress_save: bool = False) -> None:
     """Stop the background auto bot and remember the manual stop.
 
