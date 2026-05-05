@@ -11,14 +11,15 @@ DEFAULT_TRADES_DB = os.getenv("TRADES_DB_PATH", "data/trades.db")
 
 
 def _resolve_db_path(db_path: Optional[str] = None) -> str:
-    """Resolve and initialize trade history database path."""
+    """Resolve trade history database path from a file or directory."""
     resolved = (db_path or DEFAULT_TRADES_DB).strip()
-    
+
     if resolved.endswith((".db", ".sqlite", ".sqlite3")):
         db_file = resolved
     else:
         db_file = os.path.join(resolved, "trades.db")
-    
+
+    db_file = os.path.abspath(os.path.expanduser(db_file))
     parent_dir = os.path.dirname(db_file)
     if parent_dir:
         os.makedirs(parent_dir, exist_ok=True)
@@ -47,54 +48,6 @@ def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
         """
     )
     conn.commit()
-    return conn
-def _get_connection(db_path_or_env='TRADES_DB_PATH'):
-    """Get a sqlite3 connection.
-
-    Accepts either:
-      - the name of an environment variable (e.g. 'TRADES_DB_PATH'), or
-      - an explicit filesystem path to a .db file (e.g. '/home/user/.streamlit/trades.db').
-
-    This makes callers that pass a path (like `get_trade_history(logs_dir)`) safe.
-    """
-    # Determine candidate value
-    candidate = None
-
-    # If the caller passed None, use env var or default
-    if db_path_or_env is None:
-        candidate = os.environ.get('TRADES_DB_PATH', './data/trades.db')
-    else:
-        # If the provided value exactly matches an env var name, prefer that
-        if isinstance(db_path_or_env, str) and db_path_or_env in os.environ:
-            candidate = os.environ.get(db_path_or_env)
-        # If it looks like a path (contains path sep, startswith ~ or . or endswith .db), treat as path
-        elif isinstance(db_path_or_env, str) and (
-            os.path.sep in db_path_or_env or db_path_or_env.startswith('~')
-            or db_path_or_env.startswith('.') or db_path_or_env.lower().endswith('.db')
-        ):
-            candidate = db_path_or_env
-        else:
-            # Fallback to env/default
-            candidate = os.environ.get('TRADES_DB_PATH', './data/trades.db')
-
-    # Normalize path
-    db_path = os.path.expanduser(candidate)
-    abs_path = os.path.abspath(db_path)
-    parent_dir = os.path.dirname(abs_path)
-
-    # Ensure directory exists, try fallback on permission error
-    if not os.path.exists(parent_dir):
-        try:
-            os.makedirs(parent_dir, exist_ok=True)
-        except PermissionError as e:
-            print(f"[TRADE_HISTORY] ⚠️ Permission denied creating {parent_dir}: {e}")
-            fallback_path = os.path.abspath(os.path.expanduser('./data/trades.db'))
-            fallback_parent = os.path.dirname(fallback_path)
-            os.makedirs(fallback_parent, exist_ok=True)
-            abs_path = fallback_path
-
-    conn = sqlite3.connect(abs_path)
-    conn.row_factory = sqlite3.Row
     return conn
 
 
